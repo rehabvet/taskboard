@@ -205,7 +205,7 @@ export default function Board() {
     const totalCount = existingImages.length + pendingImages.length + files.length
     if (totalCount > 10) { alert('Max 10 images per task'); return }
     Array.from(files).forEach(file => {
-      if (file.size > 2 * 1024 * 1024) { alert(`${file.name} exceeds 2MB limit`); return }
+      if (file.size > 5 * 1024 * 1024) { alert(`${file.name} exceeds 5MB limit`); return }
       const reader = new FileReader()
       reader.onload = () => {
         const data = reader.result as string
