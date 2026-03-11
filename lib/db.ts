@@ -1,15 +1,19 @@
 import { Pool } from 'pg'
 
-let pool: Pool | null = null
+declare global {
+  // eslint-disable-next-line no-var
+  var _pgPool: Pool | undefined
+}
 
-export function getPool() {
-  if (!pool) {
-    pool = new Pool({
+export function getPool(): Pool {
+  if (!global._pgPool) {
+    global._pgPool = new Pool({
       connectionString: process.env.DATABASE_URL,
-      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+      ssl: { rejectUnauthorized: false },
+      max: 5,
     })
   }
-  return pool
+  return global._pgPool
 }
 
 export async function initDb() {
