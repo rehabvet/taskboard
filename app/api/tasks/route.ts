@@ -13,7 +13,10 @@ export async function GET() {
     await initDb()
     const db = getPool()
     const { rows } = await db.query(
-      `SELECT * FROM tasks ORDER BY status, sort_order, created_at`
+      `SELECT t.*, COALESCE(ic.cnt, 0)::int AS image_count
+       FROM tasks t
+       LEFT JOIN (SELECT task_id, COUNT(*) AS cnt FROM task_images GROUP BY task_id) ic ON ic.task_id = t.id
+       ORDER BY t.status, t.sort_order, t.created_at`
     )
     return NextResponse.json({ tasks: rows })
   } catch (err: any) {

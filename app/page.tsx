@@ -16,7 +16,7 @@ const PRIORITY_CONFIG: Record<string, { style: string; icon: string }> = {
   low:    { style: 'bg-slate-100 text-slate-500',    icon: '🔵' },
 }
 
-const LABEL_OPTIONS = ['bug', 'feature', 'urgent', 'blocked', 'design', 'marketing'] as const
+const LABEL_OPTIONS = ['bug', 'feature'] as const
 
 const LABEL_STYLES: Record<string, string> = {
   bug:       'bg-red-100 text-red-700',
@@ -37,6 +37,14 @@ interface Task {
   sort_order: number
   due_date: string | null
   labels: string[]
+  created_at: string
+  image_count: number
+}
+
+interface TaskImage {
+  id: string
+  filename: string
+  data: string
   created_at: string
 }
 
@@ -67,6 +75,11 @@ export default function Board() {
   const [form, setForm]         = useState({ ...BLANK_FORM })
   const [editTask, setEditTask] = useState<Task | null>(null)
   const [saving, setSaving]     = useState(false)
+
+  // Image state
+  const [pendingImages, setPendingImages] = useState<{ data: string; filename: string }[]>([])
+  const [existingImages, setExistingImages] = useState<TaskImage[]>([])
+  const [lightbox, setLightbox] = useState<{ taskId: string; images: TaskImage[]; index: number } | null>(null)
 
   const load = useCallback(async () => {
     const res = await fetch('/api/tasks')
@@ -101,21 +114,38 @@ export default function Board() {
 
   async function saveTask() {
     setSaving(true)
-    const payload = { ...form, due_date: form.due_date || null }
-    if (editTask) {
-      await api(`/api/tasks/${editTask.id}`, 'PATCH', payload)
-    } else {
-      await api('/api/tasks', 'POST', payload)
+    try {
+      const payload = { ...form, due_date: form.due_date || null }
+      let taskId = editTask?.id
+      if (editTask) {
+        await api(`/api/tasks/${editTask.id}`, 'PATCH', payload)
+      } else {
+        const res = await api('/api/tasks', 'POST', payload)
+        const d = await res.json()
+        taskId = d.task?.id
+      }
+      // Upload pending images (fire-and-forget, don't block save)
+      if (taskId && pendingImages.length > 0) {
+        for (const img of pendingImages) {
+          await api(`/api/tasks/${taskId}/images`, 'POST', img).catch(() => {})
+        }
+      }
+      await load()
+      closeForm()
+    } catch (e) {
+      console.error('saveTask error:', e)
+      alert('Failed to save task. Please try again.')
+    } finally {
+      setSaving(false)
     }
-    await load()
-    closeForm()
-    setSaving(false)
   }
 
   function closeForm() {
     setShowForm(false)
     setEditTask(null)
     setForm({ ...BLANK_FORM })
+    setPendingImages([])
+    setExistingImages([])
   }
 
   async function deleteTask(id: string) {
@@ -133,7 +163,7 @@ export default function Board() {
     await api(`/api/tasks/${draggableId}`, 'PATCH', { status: newStatus, sort_order: destination.index })
   }
 
-  function openEdit(task: Task) {
+  async function openEdit(task: Task) {
     if (!editMode) return
     setEditTask(task)
     setForm({
@@ -145,7 +175,15 @@ export default function Board() {
       due_date: task.due_date ? task.due_date.slice(0, 10) : '',
       labels: task.labels || [],
     })
+    setPendingImages([])
+    setExistingImages([])
     setShowForm(true)
+    // Lazy-load existing images
+    if (task.image_count > 0) {
+      const res = await fetch(`/api/tasks/${task.id}/images`)
+      const d = await res.json()
+      setExistingImages(d.images || [])
+    }
   }
 
   function openNew(colId: string) {
@@ -159,6 +197,35 @@ export default function Board() {
       ...f,
       labels: f.labels.includes(label) ? f.labels.filter(l => l !== label) : [...f.labels, label],
     }))
+  }
+
+  function handleImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files
+    if (!files) return
+    const totalCount = existingImages.length + pendingImages.length + files.length
+    if (totalCount > 10) { alert('Max 10 images per task'); return }
+    Array.from(files).forEach(file => {
+      if (file.size > 2 * 1024 * 1024) { alert(`${file.name} exceeds 2MB limit`); return }
+      const reader = new FileReader()
+      reader.onload = () => {
+        const data = reader.result as string
+        setPendingImages(prev => [...prev, { data, filename: file.name }])
+      }
+      reader.readAsDataURL(file)
+    })
+    e.target.value = ''
+  }
+
+  async function deleteExistingImage(taskId: string, imgId: string) {
+    await api(`/api/tasks/${taskId}/images/${imgId}`, 'DELETE')
+    setExistingImages(prev => prev.filter(img => img.id !== imgId))
+  }
+
+  async function openLightbox(taskId: string, clickIndex?: number) {
+    const res = await fetch(`/api/tasks/${taskId}/images`)
+    const d = await res.json()
+    const images = d.images || []
+    if (images.length > 0) setLightbox({ taskId, images, index: clickIndex ?? 0 })
   }
 
   const byStatus = (status: string) =>
@@ -263,6 +330,18 @@ export default function Board() {
                                   <p className="text-xs text-slate-400 mb-2 line-clamp-2 leading-relaxed">{task.description}</p>
                                 )}
 
+                                {/* Image count badge */}
+                                {task.image_count > 0 && (
+                                  <div className="flex items-center gap-1 mb-1">
+                                    <button
+                                      onClick={e => { e.stopPropagation(); openLightbox(task.id) }}
+                                      className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-purple-50 text-purple-500 hover:bg-purple-100 transition-colors"
+                                    >
+                                      🖼️ {task.image_count}
+                                    </button>
+                                  </div>
+                                )}
+
                                 {/* Footer: assignee + due date + delete */}
                                 <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-50">
                                   <div className="flex items-center gap-2">
@@ -344,7 +423,7 @@ export default function Board() {
       {/* Add/Edit Task Modal */}
       {showForm && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={e => { if (e.target === e.currentTarget) closeForm() }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden max-h-[90vh] flex flex-col">
             {/* Modal header */}
             <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-slate-100">
               <div>
@@ -355,7 +434,7 @@ export default function Board() {
             </div>
 
             {/* Modal body */}
-            <div className="px-5 py-4 space-y-4">
+            <div className="px-5 py-4 space-y-4 overflow-y-auto">
               {/* Title */}
               <input
                 className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-800 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-pink-300 focus:border-transparent"
@@ -395,35 +474,24 @@ export default function Board() {
                 </div>
               </div>
 
-              {/* Priority + Due date row */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <p className="text-xs font-semibold text-slate-400 mb-1.5">Priority</p>
-                  <div className="flex gap-1.5">
-                    {(['high', 'medium', 'low'] as const).map(p => (
-                      <button
-                        key={p}
-                        type="button"
-                        onClick={() => setForm(f => ({ ...f, priority: p }))}
-                        className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                          form.priority === p
-                            ? `${PRIORITY_CONFIG[p].style} border-current shadow-sm`
-                            : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'
-                        }`}
-                      >
-                        {PRIORITY_CONFIG[p].icon}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold text-slate-400 mb-1.5">Due date</p>
-                  <input
-                    type="date"
-                    className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-pink-300 focus:border-transparent"
-                    value={form.due_date}
-                    onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))}
-                  />
+              {/* Priority row */}
+              <div>
+                <p className="text-xs font-semibold text-slate-400 mb-1.5">Priority</p>
+                <div className="flex gap-1.5">
+                  {(['high', 'medium', 'low'] as const).map(p => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setForm(f => ({ ...f, priority: p }))}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                        form.priority === p
+                          ? `${PRIORITY_CONFIG[p].style} border-current shadow-sm`
+                          : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {PRIORITY_CONFIG[p].icon}
+                    </button>
+                  ))}
                 </div>
               </div>
 
@@ -434,6 +502,39 @@ export default function Board() {
                 value={form.assignee}
                 onChange={e => setForm(f => ({ ...f, assignee: e.target.value }))}
               />
+
+              {/* Attachments */}
+              <div>
+                <p className="text-xs font-semibold text-slate-400 mb-2">Attachments</p>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {existingImages.map(img => (
+                    <div key={img.id} className="relative group">
+                      <img src={img.data} alt={img.filename} className="w-[50px] h-[50px] rounded-lg object-cover border border-slate-200" />
+                      <button
+                        type="button"
+                        onClick={() => editTask && deleteExistingImage(editTask.id, img.id)}
+                        className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white rounded-full text-[10px] leading-none flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      >×</button>
+                    </div>
+                  ))}
+                  {pendingImages.map((img, i) => (
+                    <div key={i} className="relative group">
+                      <img src={img.data} alt={img.filename} className="w-[50px] h-[50px] rounded-lg object-cover border border-slate-200 border-dashed" />
+                      <button
+                        type="button"
+                        onClick={() => setPendingImages(prev => prev.filter((_, j) => j !== i))}
+                        className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white rounded-full text-[10px] leading-none flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      >×</button>
+                    </div>
+                  ))}
+                </div>
+                {existingImages.length + pendingImages.length < 10 && (
+                  <label className="inline-flex items-center gap-1.5 text-xs text-pink-500 hover:text-pink-600 cursor-pointer transition-colors">
+                    <span>+ Add images</span>
+                    <input type="file" accept="image/*" multiple className="hidden" onChange={handleImageSelect} />
+                  </label>
+                )}
+              </div>
             </div>
 
             {/* Modal footer */}
@@ -449,6 +550,41 @@ export default function Board() {
                 {saving ? 'Saving…' : editTask ? 'Save changes' : 'Add task'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lightbox */}
+      {lightbox && (
+        <div
+          className="fixed inset-0 bg-black/90 flex items-center justify-center z-[60] p-4"
+          onClick={() => setLightbox(null)}
+        >
+          <button
+            onClick={() => setLightbox(null)}
+            className="absolute top-4 right-4 text-white/70 hover:text-white text-3xl leading-none w-10 h-10 flex items-center justify-center"
+          >×</button>
+          {lightbox.images.length > 1 && (
+            <>
+              <button
+                onClick={e => { e.stopPropagation(); setLightbox(lb => lb && ({ ...lb, index: (lb.index - 1 + lb.images.length) % lb.images.length })) }}
+                className="absolute left-4 text-white/70 hover:text-white text-3xl leading-none w-10 h-10 flex items-center justify-center"
+              >‹</button>
+              <button
+                onClick={e => { e.stopPropagation(); setLightbox(lb => lb && ({ ...lb, index: (lb.index + 1) % lb.images.length })) }}
+                className="absolute right-16 text-white/70 hover:text-white text-3xl leading-none w-10 h-10 flex items-center justify-center"
+              >›</button>
+            </>
+          )}
+          <img
+            src={lightbox.images[lightbox.index].data}
+            alt={lightbox.images[lightbox.index].filename}
+            className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg"
+            onClick={e => e.stopPropagation()}
+          />
+          <div className="absolute bottom-4 text-white/50 text-xs">
+            {lightbox.images[lightbox.index].filename && <span>{lightbox.images[lightbox.index].filename} · </span>}
+            {lightbox.index + 1} / {lightbox.images.length}
           </div>
         </div>
       )}

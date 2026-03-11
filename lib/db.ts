@@ -36,4 +36,14 @@ export async function initDb() {
   // Migrate existing tables: add new columns if they don't exist
   await db.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS due_date DATE`)
   await db.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS labels TEXT[] DEFAULT ARRAY[]::TEXT[]`)
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS task_images (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      data TEXT NOT NULL,
+      filename TEXT DEFAULT '',
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `)
 }
