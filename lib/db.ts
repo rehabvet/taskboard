@@ -27,8 +27,13 @@ export async function initDb() {
       priority TEXT NOT NULL DEFAULT 'medium',
       assignee TEXT DEFAULT '',
       sort_order INTEGER DEFAULT 0,
+      due_date DATE,
+      labels TEXT[] DEFAULT ARRAY[]::TEXT[],
       created_at TIMESTAMPTZ DEFAULT NOW(),
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )
   `)
+  // Migrate existing tables: add new columns if they don't exist
+  await db.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS due_date DATE`)
+  await db.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS labels TEXT[] DEFAULT ARRAY[]::TEXT[]`)
 }

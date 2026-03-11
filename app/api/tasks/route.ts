@@ -28,11 +28,11 @@ export async function POST(req: NextRequest) {
     await initDb()
     const db = getPool()
     const body = await req.json()
-    const { title, description = '', status = 'todo', priority = 'medium', assignee = '' } = body
+    const { title, description = '', status = 'todo', priority = 'medium', assignee = '', due_date = null, labels = [] } = body
     if (!title?.trim()) return NextResponse.json({ error: 'Title required' }, { status: 400 })
     const { rows } = await db.query(
-      `INSERT INTO tasks (title, description, status, priority, assignee) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-      [title.trim(), description, status, priority, assignee]
+      `INSERT INTO tasks (title, description, status, priority, assignee, due_date, labels) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [title.trim(), description, status, priority, assignee, due_date || null, labels]
     )
     return NextResponse.json({ task: rows[0] }, { status: 201 })
   } catch (err: any) {

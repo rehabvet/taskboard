@@ -11,7 +11,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (!checkPin(req)) return NextResponse.json({ error: 'Wrong PIN' }, { status: 401 })
   const db = getPool()
   const body = await req.json()
-  const { title, description, status, priority, assignee, sort_order } = body
+  const { title, description, status, priority, assignee, sort_order, due_date, labels } = body
   const { rows } = await db.query(
     `UPDATE tasks SET
       title = COALESCE($1, title),
@@ -20,9 +20,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       priority = COALESCE($4, priority),
       assignee = COALESCE($5, assignee),
       sort_order = COALESCE($6, sort_order),
+      due_date = CASE WHEN $8::boolean THEN $7::date ELSE due_date END,
+      labels = COALESCE($9, labels),
       updated_at = NOW()
-    WHERE id = $7 RETURNING *`,
-    [title, description, status, priority, assignee, sort_order, params.id]
+    WHERE id = $10 RETURNING *`,
+    [title, description, status, priority, assignee, sort_order, due_date || null, due_date !== undefined, labels, params.id]
   )
   if (!rows.length) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   return NextResponse.json({ task: rows[0] })
