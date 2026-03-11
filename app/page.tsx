@@ -358,7 +358,7 @@ export default function Board() {
             <div className="px-5 py-4 space-y-4">
               {/* Title */}
               <input
-                className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-medium placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-pink-300 focus:border-transparent"
+                className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-800 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-pink-300 focus:border-transparent"
                 placeholder="Task title…"
                 value={form.title}
                 onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
@@ -367,7 +367,7 @@ export default function Board() {
 
               {/* Description */}
               <textarea
-                className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-pink-300 focus:border-transparent resize-none"
+                className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-pink-300 focus:border-transparent resize-none"
                 rows={2}
                 placeholder="Description (optional)"
                 value={form.description}
@@ -420,7 +420,7 @@ export default function Board() {
                   <p className="text-xs font-semibold text-slate-400 mb-1.5">Due date</p>
                   <input
                     type="date"
-                    className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-pink-300 focus:border-transparent"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-pink-300 focus:border-transparent"
                     value={form.due_date}
                     onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))}
                   />
@@ -429,7 +429,7 @@ export default function Board() {
 
               {/* Assignee */}
               <input
-                className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-pink-300 focus:border-transparent"
+                className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-pink-300 focus:border-transparent"
                 placeholder="Assignee (optional)"
                 value={form.assignee}
                 onChange={e => setForm(f => ({ ...f, assignee: e.target.value }))}
